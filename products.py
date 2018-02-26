@@ -4,8 +4,10 @@ import hmac
 import base64
 import datetime
 import hashlib
+import csv
 from urllib.parse import quote
 from pytz import timezone
+import random
 
 class AmazoneApi(object):
     """docstring for AmazoneApi."""
@@ -43,14 +45,13 @@ class AmazoneApi(object):
         root = ET.fromstring(feedlist.content)
         for child in root.iter('*'):
             print(child.tag)
-        print("-------------------------------")
-        print(feedlist.content)
     def getCurrentTimeStamp(self):
         now_utc = datetime.datetime.now(timezone('UTC'))
         now_pacific = now_utc.astimezone(timezone('US/Pacific'))
         self.timestamp = now_pacific.isoformat()
-    def submitProductFeed(self):
+    def submitProductFeed(self,row):
         self.action = "SubmitFeed"
+        sku = random.randint(0,1000)
         contentbody = """
         <?xml version="1.0" encoding="iso-8859-1"?>
         <AmazonEnvelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -65,19 +66,19 @@ class AmazoneApi(object):
             <MessageID>1</MessageID>
             <OperationType>Update</OperationType>
             <Product>
-              <SKU>56789</SKU>
+              <SKU>"""+row["Part Number"]+str(sku)+"""</SKU>
               <StandardProductID>
                 <Type>ASIN</Type>
-                <Value>B0EXAMPLEG</Value>
+                <Value>"""+row["Part Number"]+"""</Value>
               </StandardProductID>
-              <ProductTaxCode>A_GEN_NOTAX</ProductTaxCode>
+              <ProductTaxCode>"""+row["Part Number"]+"""</ProductTaxCode>
               <DescriptionData>
-                <Title>Example Product Title</Title>
-                <Brand>Example Product Brand</Brand>
-                <Description>This is an example product description.</Description>
+                <Title>"""+row["Title"]+"""</Title>
+                <Brand>"""+row["Brand"]+"""</Brand>
+                <Description>"""+row["Description"]+"""</Description>
                 <BulletPoint>Example Bullet Point 1</BulletPoint>
                 <BulletPoint>Example Bullet Point 2</BulletPoint>
-                <MSRP currency="USD">25.19</MSRP>
+                <MSRP currency="USD">"""+row["Start Price"]+"""</MSRP>
                 <Manufacturer>Example Product Manufacturer</Manufacturer>
                 <ItemType>example-item-type</ItemType>
               </DescriptionData>
@@ -95,14 +96,20 @@ class AmazoneApi(object):
           </Message>
         </AmazonEnvelope>
         """
+        self.feedtype = "_POST_PRODUCT_DATA_"
         m = hashlib.md5()
         m.update(contentbody.encode('utf-8'))
-        self.contentmd5 = m.hexdigest()
+        print("contentmd5")
+        digestvalue = m.digest()
+        print(digestvalue)
+        self.contentmd5 = (base64.b64encode(digestvalue)).decode()
+        print(self.contentmd5)
         signature = self.getSignature()
         signature = signature.decode()
-        params = self.getParam()+"&Signature="+quote(signature)+"PurgeAndReplace=false"
+        params = self.getParam()+"&Signature="+quote(signature)
         request_url = self.host+"?"+params
-        feedlist = requests.post(request_url)
+        headers = {'content-type': 'text/xml'}
+        feedlist = requests.post(request_url,data=contentbody,headers=headers)
         root = ET.fromstring(feedlist.content)
         for child in root.iter('*'):
             print(child.tag)
@@ -112,20 +119,21 @@ class AmazoneApi(object):
         self.getCurrentTimeStamp()
         data ="AWSAccessKeyId="+str(self.awsaccesskeyid)
         data +="&Action="+str(self.action)
-        data +="&MWSAuthToken="+str(self.mwsauthtoken)
-        data +="&Merchant="+str(self.merchant)
-        data +="&SignatureMethod="+str(self.signaturemethod)
-        data +="&SignatureVersion="+str(self.signatureversion)
-        data +="&Timestamp="+quote(str(self.timestamp))
-        data +="&Version="+str(self.version)
         if self.contentmd5:
             data +="&ContentMD5Value="+quote(str(self.contentmd5))
         if self.feedtype:
             data +="&FeedType="+str(self.feedtype)
+        data +="&MWSAuthToken="+str(self.mwsauthtoken)
         if self.marketplaceid1:
             data +="&MarketplaceIdList.Id.1="+str(self.marketplaceid1)
+        data +="&Merchant="+str(self.merchant)
         if self.action == "SubmitFeed":
             data +="&PurgeAndReplace=false"
+        data +="&SignatureMethod="+str(self.signaturemethod)
+        data +="&SignatureVersion="+str(self.signatureversion)
+        data +="&Timestamp="+quote(str(self.timestamp))
+        data +="&Version="+str(self.version)
+
         self.uri_param = data
         StringToSign = "POST"+"\n"+"mws.amazonservices.com"+"\n/"+"\n"+data
         print(StringToSign)
@@ -135,21 +143,27 @@ class AmazoneApi(object):
     def getParam(self):
         data ="AWSAccessKeyId="+str(self.awsaccesskeyid)
         data +="&Action="+str(self.action)
-        data +="&MWSAuthToken="+str(self.mwsauthtoken)
-        data +="&Merchant="+str(self.merchant)
-        data +="&SignatureMethod="+str(self.signaturemethod)
-        data +="&SignatureVersion="+str(self.signatureversion)
-        data +="&Timestamp="+str(self.timestamp)
-        data +="&Version="+str(self.version)
         if self.contentmd5:
             data +="&ContentMD5Value="+quote(str(self.contentmd5))
         if self.feedtype:
             data +="&FeedType="+str(self.feedtype)
+        data +="&MWSAuthToken="+str(self.mwsauthtoken)
         if self.marketplaceid1:
             data +="&MarketplaceIdList.Id.1="+str(self.marketplaceid1)
+        data +="&Merchant="+str(self.merchant)
         if self.action == "SubmitFeed":
             data +="&PurgeAndReplace=false"
+        data +="&SignatureMethod="+str(self.signaturemethod)
+        data +="&SignatureVersion="+str(self.signatureversion)
+        data +="&Timestamp="+str(self.timestamp)
+        data +="&Version="+str(self.version)
+
         return data
         # return base64.b64encode(hmac.new(key_bytes, data_bytes, hashlib.sha256))
-a = AmazoneApi("AKIAIUFSF6B7TP5RYJ3A","inne0ux16QVqSI73g0IN5qK2fKErTBX2PJSZLGB9","amzn.mws.42b059b1-50ee-d065-34c8-231ed474b401","A1IF11LNLJA1GU")
-a.getFeedList()
+a = AmazoneApi("AKIAIUFSF6B7TP5RYJ3A","inne0ux16QVqSI73g0IN5qK2fKErTBX2PJSZLGB9","amzn.mws.42b059b1-50ee-d065-34c8-231ed474b401","A1IF11LNLJA1GU","ATVPDKIKX0DER")
+# a.getFeedList()
+with open('products.csv') as csvfile:
+    reader = csv.DictReader(csvfile)
+    for row in reader:
+        a.submitProductFeed(row)
+        print("-----------------------------------------------------------------")
